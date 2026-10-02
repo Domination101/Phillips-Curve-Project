@@ -1,0 +1,167 @@
+---
+title: "Does the Phillips Curve Still Hold?"
+subtitle: "Evidence from OECD Economies, 2000–2024"
+author: "Laeg T. Winder"
+date: today
+date-format: "MMMM YYYY"
+format:
+  pdf:
+    documentclass: article
+    geometry: margin=2.5cm
+    fontsize: 11pt
+    number-sections: true
+    colorlinks: true
+    fig-width: 6.5
+    fig-height: 4
+    fig-pos: "H"
+    tbl-pos: "H"
+    include-in-header:
+      text: |
+        \usepackage{float}
+        \floatplacement{table}{H}
+        \floatplacement{figure}{H}
+engine: knitr
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(DBI)
+library(RSQLite)
+library(modelsummary)
+
+# Consistent look for every plot
+theme_set(
+  theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+)
+
+# Shared regression-table settings
+coef_labels <- c("(Intercept)" = "Intercept",
+                 "unemployment" = "Unemployment rate (%)")
+gof_rows <- tribble(
+  ~raw,        ~clean,  ~fmt,
+  "nobs",      "N",     0,
+  "r.squared", "R²",    3
+)
+
+# Data
+con <- dbConnect(SQLite(), "econ.db")
+
+df <- dbGetQuery(con, "
+  SELECT year,
+         country,
+         inflation,
+         gdp_growth,
+         unemployment,
+         unemployment - LAG(unemployment)
+           OVER (PARTITION BY country ORDER BY year) AS unemployment_change
+  FROM data
+") |>
+  mutate(period = factor(if_else(year < 2009, "2000–2008", "2009–2024")))
+
+dbDisconnect(con)
+```
+
+# Abstract
+
+My lectures were retreading some old ground on economics, specifically the Phillips Curve so I have tested whether it appears in the data by investigating OECD records using SQL and R to extract relevant metrics. This is primarily a training exercise and all relevant code is available on my github. I found some support for the Phillips curve especially when accounting for regime change post the 2008 crash.
+
+# Background
+
+The Phillips curve describes a negative correlation between unemployment and inflation. A stronger version of the idea holds that high unemployment directly causes inflation to fall, and vice versa. The relationship is a staple of introductory macroeconomics so I decided it was worth giving my own eyes a shot at it.
+
+# Initial Findings
+
+```{r}
+#| label: fig-naive
+#| fig-cap: "Inflation against unemployment, all countries and years, with a fitted linear trend."
+
+ggplot(df, aes(x = unemployment, y = inflation)) +
+  geom_point(aes(colour = country), alpha = 0.7, size = 1.8) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE,
+              colour = "black", linewidth = 0.8) +
+  labs(
+    title = "Naive Phillips Curve",
+    x = "Unemployment (%)",
+    y = "Inflation (%)",
+    colour = NULL
+  ) +
+  guides(colour = guide_legend(nrow = 2))
+```
+
+@fig-naive shows a negative relationship between a country's unemployment rate and its inflation rate across 2000–2024. This is consistent with the theory but doesn't account for changes in the relationship over time that may be muddying the waters.
+
+```{r}
+#| label: tbl-naive
+#| tbl-cap: "Naive model: inflation regressed on unemployment, 2000–2024."
+
+reg1 <- lm(inflation ~ unemployment, data = df)
+
+modelsummary(
+  list("All years" = reg1),
+  stars = TRUE,
+  coef_rename = coef_labels,
+  gof_map = gof_rows,
+  notes = "Standard errors in parentheses."
+)
+```
+
+The regression in @tbl-naive confirms the negative slope, but it is significant only at the 10% level. My next question is as with many areas of economics, how did the 2008 crisis impact this?
+
+# Pre- and Post-2008 Comparison
+
+```{r}
+#| label: fig-period
+#| fig-cap: "Inflation against unemployment, split into pre- and post-2008 periods."
+
+ggplot(df, aes(x = unemployment, y = inflation, colour = period)) +
+  geom_point(alpha = 0.6, size = 1.8) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, linewidth = 0.8) +
+  scale_colour_manual(values = c("2000–2008" = "#E69F00",
+                                 "2009–2024" = "#0072B2")) +
+  labs(
+    title = "Phillips Curve Before and After 2008",
+    x = "Unemployment (%)",
+    y = "Inflation (%)",
+    colour = "Period"
+  )
+```
+
+@fig-period shows a clear shift in the relationship around the 2008 crisis. Before the crash the relationship had largely vanished, but after the crisis it reappeared.
+
+There are many possible explanations for this resurgence. One candidate is that the shakeup post crisis made regulators more exacting about inflation thus letting the natural relation arise again with less interference from artificially increased inflation.
+
+```{r}
+#| label: tbl-period
+#| tbl-cap: "Inflation regressed on unemployment, estimated separately for each period."
+
+reg_pre  <- lm(inflation ~ unemployment, data = filter(df, period == "2000–2008"))
+reg_post <- lm(inflation ~ unemployment, data = filter(df, period == "2009–2024"))
+
+modelsummary(
+  list("2000–2008" = reg_pre, "2009–2024" = reg_post),
+  stars = TRUE,
+  coef_rename = coef_labels,
+  gof_map = gof_rows,
+  notes = "Standard errors in parentheses."
+)
+```
+
+@tbl-period shows that even within the post-2008 period, the relationship is not strongly significant, though it is clearly negative.
+
+# Conclusion
+
+The Phillips curve is not an ironclad relationship as it was once believed to be, but it still holds some water. The relationship appears weak when all years are pooled and more visible after 2008, which suggests it is sensitive to the policy environment.
+
+On the technical side, using SQL made extracting and reshaping the data considerably easier, and the project has been a useful way to build proficiency in both SQL and R.
