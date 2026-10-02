@@ -75,7 +75,7 @@ dbDisconnect(con)
 
 # Abstract
 
-My lectures were retreading some old ground on economics, specifically the Phillips Curve so I have tested whether it appears in the data by investigating OECD records using SQL and R to extract relevant metrics. This is primarily a training exercise and all relevant code is available on my github. I found some support for the Phillips curve especially when accounting for regime change post the 2008 crash.
+My lectures were retreading some old ground on economics, specifically the Phillips Curve so I have tested whether it appears in the data by investigating OECD records using SQL and R to extract relevant metrics. This is primarily a training exercise and all relevant code is available on my [GitHub](https://github.com/Domination101/Phillips-Curve-Project) I found some support for the Phillips curve especially when accounting for regime change post the 2008 crash.
 
 # Background
 
